@@ -49,8 +49,7 @@
 #include "audio/format.h"
 #include "osdep/timer.h"
 #include "core/subopt-helper.h"
-
-#include "ao_coreaudio/ca_ringbuffer_internal.h"
+#include "core/mp_ring.h"
 
 #define ca_msg(a, b, c ...) mp_msg(a, b, "AO: [coreaudio] " c)
 
@@ -58,10 +57,10 @@ static void audio_pause(struct ao *ao);
 static void audio_resume(struct ao *ao);
 static void reset(struct ao *ao);
 
-static void print_buffer(struct ca_ringbuffer *buffer)
+static void print_buffer(struct mp_ring *buffer)
 {
     void *tctx = talloc_new(NULL);
-    ca_msg(MSGT_AO, MSGL_V, "%s\n", ca_ringbuffer_repr(buffer, tctx));
+    ca_msg(MSGT_AO, MSGL_V, "%s\n", mp_ring_repr(buffer, tctx));
     talloc_free(tctx);
 }
 
@@ -92,7 +91,7 @@ struct priv
     int packetSize;
     int paused;
 
-    struct ca_ringbuffer *buffer;
+    struct mp_ring *buffer;
 };
 
 static OSStatus theRenderProc(void *inRefCon,
@@ -104,14 +103,14 @@ static OSStatus theRenderProc(void *inRefCon,
     struct ao *ao  = inRefCon;
     struct priv *p = ao->priv;
 
-    int buffered  = ca_ringbuffer_buffered(p->buffer);
+    int buffered  = mp_ring_buffered(p->buffer);
     int requested = inNumFrames * p->packetSize;
 
     if (buffered > requested)
         buffered = requested;
 
     if (buffered) {
-        ca_ringbuffer_read(p->buffer,
+        mp_ring_read(p->buffer,
                            (unsigned char *)ioData->mBuffers[0].mData,
                            buffered);
     } else {
@@ -622,8 +621,8 @@ static int init(struct ao *ao, char *params)
 
     ao->bps        = ao->samplerate * inDesc.mBytesPerFrame;
     ao->buffersize = ao->bps;
-    p->buffer      = ca_ringbuffer_new2(p, ao->bps, maxFrames);
-    ao->outburst   = ca_ringbuffer_chunk_size(p->buffer);
+    p->buffer      = mp_ring_new3(p, ao->bps, maxFrames);
+    ao->outburst   = maxFrames;
 
     print_buffer(p->buffer);
 
@@ -859,8 +858,8 @@ static int OpenSPDIF(struct ao *ao)
     /* For ac3/dts, just use packet size 6144 bytes as chunk size. */
     int chunk_size = p->stream_format.mBytesPerPacket;
     ao->buffersize = ao->bps;
-    p->buffer      = ca_ringbuffer_new2(p, ao->bps, chunk_size);
-    ao->outburst   = ca_ringbuffer_chunk_size(p->buffer);
+    p->buffer      = mp_ring_new3(p, ao->bps, chunk_size);
+    ao->outburst   = chunk_size;
 
     print_buffer(p->buffer);
 
@@ -1071,7 +1070,7 @@ static OSStatus RenderCallbackSPDIF(AudioDeviceID inDevice,
 {
     struct ao *ao  = threadGlobals;
     struct priv *p = ao->priv;
-    int amt = ca_ringbuffer_buffered(p->buffer);
+    int amt = mp_ring_buffered(p->buffer);
     AudioBuffer ca_buffer = outOutputData->mBuffers[p->i_stream_index];
     int req = ca_buffer.mDataByteSize;
 
@@ -1079,9 +1078,9 @@ static OSStatus RenderCallbackSPDIF(AudioDeviceID inDevice,
         amt = req;
     if (amt) {
         if (p->b_muted) {
-            ca_ringbuffer_read(p->buffer, NULL, amt);
+            mp_ring_read(p->buffer, NULL, amt);
         } else {
-            ca_ringbuffer_read(p->buffer, (unsigned char *)ca_buffer.mData, amt);
+            mp_ring_read(p->buffer, (unsigned char *)ca_buffer.mData, amt);
         }
     }
 
@@ -1116,7 +1115,7 @@ static int play(struct ao *ao, void *output_samples, int num_bytes, int flags)
                    "Detected current stream does not support digital.\n");
     }
 
-    wrote = ca_ringbuffer_write(p->buffer, output_samples, num_bytes);
+    wrote = mp_ring_write(p->buffer, output_samples, num_bytes);
     audio_resume(ao);
 
     return wrote;
@@ -1127,7 +1126,7 @@ static void reset(struct ao *ao)
 {
     struct priv *p = ao->priv;
     audio_pause(ao);
-    ca_ringbuffer_reset(p->buffer);
+    mp_ring_reset(p->buffer);
 }
 
 
@@ -1135,7 +1134,7 @@ static void reset(struct ao *ao)
 static int get_space(struct ao *ao)
 {
     struct priv *p = ao->priv;
-    return ca_ringbuffer_available(p->buffer);
+    return mp_ring_available(p->buffer);
 }
 
 
@@ -1144,7 +1143,7 @@ static float get_delay(struct ao *ao)
 {
     // inaccurate, should also contain the data buffered e.g. by the OS
     struct priv *p = ao->priv;
-    return ca_ringbuffer_buffered(p->buffer) / (float)ao->bps;
+    return mp_ring_buffered(p->buffer) / (float)ao->bps;
 }
 
 static void uninit(struct ao *ao, bool immed)
@@ -1154,9 +1153,9 @@ static void uninit(struct ao *ao, bool immed)
 
     if (!immed) {
         long long timeleft =
-            (1000000LL * ca_ringbuffer_buffered(p->buffer)) / ao->bps;
-        ca_msg(MSGT_AO, MSGL_DBG2, "%d bytes left @%d bps (%d usec)\n", ca_ringbuffer_buffered(
-                   p->buffer), ao->bps, (int)timeleft);
+            (1000000LL * mp_ring_buffered(p->buffer)) / ao->bps;
+        ca_msg(MSGT_AO, MSGL_DBG2, "%d bytes left @%d bps (%d usec)\n",
+                mp_ring_buffered(p->buffer), ao->bps, (int)timeleft);
         mp_sleep_us((int)timeleft);
     }
 
