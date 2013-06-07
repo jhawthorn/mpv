@@ -47,8 +47,8 @@ enum mp_voctrl {
 
     VOCTRL_GET_PANSCAN,
     VOCTRL_SET_PANSCAN,
-    VOCTRL_SET_EQUALIZER,               // struct voctrl_set_equalizer_args
-    VOCTRL_GET_EQUALIZER,               // struct voctrl_get_equalizer_args
+    VOCTRL_SET_EQUALIZER,               // struct voctrl_set_equalizer_args*
+    VOCTRL_GET_EQUALIZER,               // struct voctrl_get_equalizer_args*
 
     /* for vdpau hardware decoding */
     VOCTRL_HWDEC_DECODER_RENDER,        // pointer to hw state
@@ -61,19 +61,19 @@ enum mp_voctrl {
     VOCTRL_ONTOP,
     VOCTRL_BORDER,
 
-    VOCTRL_SET_CURSOR_VISIBILITY,       // bool
+    VOCTRL_SET_CURSOR_VISIBILITY,       // bool*
 
     VOCTRL_SET_DEINTERLACE,
     VOCTRL_GET_DEINTERLACE,
 
     VOCTRL_UPDATE_SCREENINFO,
 
-    VOCTRL_SET_YUV_COLORSPACE,          // struct mp_csp_details
-    VOCTRL_GET_YUV_COLORSPACE,          // struct mp_csp_details
+    VOCTRL_SET_YUV_COLORSPACE,          // struct mp_csp_details*
+    VOCTRL_GET_YUV_COLORSPACE,          // struct mp_csp_details*
 
-    VOCTRL_SCREENSHOT,                  // struct voctrl_screenshot_args
+    VOCTRL_SCREENSHOT,                  // struct voctrl_screenshot_args*
 
-    VOCTRL_SET_COMMAND_LINE,            // char*
+    VOCTRL_SET_COMMAND_LINE,            // char**
 };
 
 // VOCTRL_SET_EQUALIZER
@@ -160,18 +160,27 @@ struct vo_driver {
     int (*query_format)(struct vo *vo, uint32_t format);
 
     /*
-     * Initialize (means CONFIGURE) the display driver.
-     * params:
+     * Initialize or reconfigure the display driver.
      *   width,height: image source size
-     *   d_width,d_height: size of the requested window size, just a hint
-     *   fullscreen: flag, 0=windowd 1=fullscreen, just a hint
+     *   d_width,d_height: requested window size, just a hint
+     *   flags: combination of VOFLAG_ values
      *   title: window title, if available
      *   format: fourcc of pixel format
      * returns : zero on successful initialization, non-zero on error.
      */
     int (*config)(struct vo *vo, uint32_t width, uint32_t height,
-                  uint32_t d_width, uint32_t d_height, uint32_t fullscreen,
+                  uint32_t d_width, uint32_t d_height, uint32_t flags,
                   uint32_t format);
+
+    /*
+     * Initialize or reconfigure the display driver. Alternative to config(),
+     * and can carry more image parameters.
+     *   prototype: video parameters, like pixel format and frame size
+     *              doesn't contain any actual image data
+     *   flags: combination of VOFLAG_ values
+     * returns: < 0 on error, >= 0 on success
+     */
+    int (*reconfig)(struct vo *vo, struct mp_image *prototype, int flags);
 
     /*
      * Control interface
@@ -280,9 +289,7 @@ struct vo *init_best_video_out(struct mp_vo_opts *opts,
                                struct mp_fifo *key_fifo,
                                struct input_ctx *input_ctx,
                                struct encode_lavc_context *encode_lavc_ctx);
-int vo_config(struct vo *vo, uint32_t width, uint32_t height,
-                     uint32_t d_width, uint32_t d_height, uint32_t flags,
-                     uint32_t format);
+int vo_reconfig(struct vo *vo, struct mp_image *pt, int flags);
 void list_video_out(void);
 
 int vo_control(struct vo *vo, uint32_t request, void *data);

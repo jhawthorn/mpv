@@ -440,10 +440,18 @@ static int init_vo(sh_video_t *sh, AVFrame *frame)
         ctx->pix_fmt = pix_fmt;
         ctx->best_csp = pixfmt2imgfmt(pix_fmt);
 
-        sh->colorspace = avcol_spc_to_mp_csp(ctx->avctx->colorspace);
-        sh->color_range = avcol_range_to_mp_csp_levels(ctx->avctx->color_range);
+        struct mp_image pt = {0};
+        mp_image_setfmt(&pt, ctx->best_csp);
+        // Ideally, we should also set aspect ratio, but we aren't there yet
+        // - so vd.c calculates display size from sh->aspect.
+        mp_image_set_size(&pt, width, height);
 
-        if (!mpcodecs_config_vo(sh, sh->disp_w, sh->disp_h, ctx->best_csp))
+        pt.colorspace = avcol_spc_to_mp_csp(ctx->avctx->colorspace);
+        pt.levels = avcol_range_to_mp_csp_levels(ctx->avctx->color_range);
+
+        ctx->format = pt;
+
+        if (mpcodecs_reconfig_vo(sh, &ctx->format) < 0)
             return -1;
 
         ctx->vo_initialized = 1;
@@ -694,8 +702,8 @@ static int decode(struct sh_video *sh, struct demux_packet *packet,
     struct mp_image *mpi = image_from_decoder(sh);
     assert(mpi->planes[0]);
 
-    mpi->colorspace = sh->colorspace;
-    mpi->levels = sh->color_range;
+    mpi->colorspace = ctx->format.colorspace;
+    mpi->levels = ctx->format.levels;
 
     *out_image = mpi;
     return 1;
@@ -749,7 +757,8 @@ static int control(sh_video_t *sh, int cmd, void *arg)
         *(int *)arg = delay;
         return CONTROL_TRUE;
     case VDCTRL_REINIT_VO:
-        mpcodecs_config_vo(sh, sh->disp_w, sh->disp_h, ctx->best_csp);
+        if (ctx->vo_initialized)
+            mpcodecs_reconfig_vo(sh, &ctx->format);
         return true;
     }
     return CONTROL_UNKNOWN;

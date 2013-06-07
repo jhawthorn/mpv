@@ -152,15 +152,14 @@ static int mp_chroma_div_up(int size, int shift)
 // Caller has to make sure this doesn't exceed the allocated plane data/strides.
 void mp_image_set_size(struct mp_image *mpi, int w, int h)
 {
-    mpi->w = w;
-    mpi->h = h;
+    mpi->w = mpi->display_w = w;
+    mpi->h = mpi->display_h = h;
     for (int n = 0; n < mpi->num_planes; n++) {
         mpi->plane_w[n] = mp_chroma_div_up(mpi->w, mpi->fmt.xs[n]);
         mpi->plane_h[n] = mp_chroma_div_up(mpi->h, mpi->fmt.ys[n]);
     }
     mpi->chroma_width = mpi->plane_w[1];
     mpi->chroma_height = mpi->plane_h[1];
-    mpi->display_w = mpi->display_h = 0;
 }
 
 void mp_image_set_display_size(struct mp_image *mpi, int dw, int dh)
@@ -327,7 +326,8 @@ void mp_image_copy_attributes(struct mp_image *dst, struct mp_image *src)
         dst->levels = src->levels;
     }
     if (dst->imgfmt == IMGFMT_PAL8 && src->imgfmt == IMGFMT_PAL8) {
-        memcpy(dst->planes[1], src->planes[1], MP_PALETTE_SIZE);
+        if (dst->planes[1] && src->planes[1])
+            memcpy(dst->planes[1], src->planes[1], MP_PALETTE_SIZE);
     }
 }
 
