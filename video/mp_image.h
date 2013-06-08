@@ -82,6 +82,8 @@ typedef struct mp_image {
 
     enum mp_csp colorspace;
     enum mp_csp_levels levels;
+    enum mp_chroma_location chroma_location;
+
     /* only inside filter chain */
     double pts;
     /* memory management */

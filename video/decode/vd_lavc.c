@@ -448,6 +448,8 @@ static int init_vo(sh_video_t *sh, AVFrame *frame)
 
         pt.colorspace = avcol_spc_to_mp_csp(ctx->avctx->colorspace);
         pt.levels = avcol_range_to_mp_csp_levels(ctx->avctx->color_range);
+        pt.chroma_location =
+            avchroma_location_to_mp(ctx->avctx->chroma_sample_location);
 
         ctx->format = pt;
 
@@ -704,6 +706,7 @@ static int decode(struct sh_video *sh, struct demux_packet *packet,
 
     mpi->colorspace = ctx->format.colorspace;
     mpi->levels = ctx->format.levels;
+    mpi->chroma_location = ctx->format.chroma_location;
 
     *out_image = mpi;
     return 1;

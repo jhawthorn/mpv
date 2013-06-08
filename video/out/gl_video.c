@@ -185,6 +185,7 @@ struct gl_video {
 
     struct mp_csp_details colorspace;
     struct mp_csp_equalizer video_eq;
+    enum mp_chroma_location chroma_loc;
 
     struct mp_rect src_rect;    // displayed part of the source video
     struct mp_rect dst_rect;    // video rectangle on output window
@@ -279,6 +280,10 @@ const struct m_sub_options gl_video_conf = {
                    ({"fruit", 0}, {"ordered", 1}, {"no", -1})),
         OPT_INTRANGE("dither-size-fruit", dither_size, 0, 2, 8),
         OPT_FLAG("temporal-dither", temporal_dither, 0),
+        OPT_CHOICE("chroma-location", chroma_location, 0,
+                   ({"auto",   MP_CHROMA_AUTO},
+                    {"center", MP_CHROMA_CENTER},
+                    {"left",   MP_CHROMA_LEFT})),
         OPT_FLAG("alpha", enable_alpha, 0),
         {0}
     },
@@ -506,6 +511,27 @@ static void update_uniforms(struct gl_video *p, GLuint program)
         gl->Uniform1i(gl->GetUniformLocation(program, textures_n), n);
         gl->Uniform2f(gl->GetUniformLocation(program, textures_size_n),
                       p->image.planes[n].w, p->image.planes[n].h);
+    }
+
+    loc = gl->GetUniformLocation(program, "chroma_center_offset");
+    if (loc >= 0) {
+        int chr = p->opts.chroma_location;
+        if (!chr)
+            chr = p->chroma_loc;
+        int cx, cy;
+        mp_get_chroma_location(chr, &cx, &cy);
+        // By default texture coordinates are such that chroma is centered with
+        // any chroma subsampling. If a specific direction is given, make it
+        // so that the luma and chroma sample line up exactly.
+        // For 4:4:4, setting chroma location should have no effect at all.
+        // luma sample size (in chroma coord. space)
+        float ls_w = 1.0 / (1 << p->image_desc.chroma_xs);
+        float ls_h = 1.0 / (1 << p->image_desc.chroma_ys);
+        // move chroma center to luma center (in chroma coord. space)
+        float o_x = ls_w < 1 ? ls_w * -cx / 2 : 0;
+        float o_y = ls_h < 1 ? ls_h * -cy / 2 : 0;
+        gl->Uniform2f(loc, o_x / FFMAX(p->image.planes[1].w, 1),
+                           o_y / FFMAX(p->image.planes[1].h, 1));
     }
 
     gl->Uniform2f(gl->GetUniformLocation(program, "dither_size"),
@@ -1161,6 +1187,7 @@ static void init_video(struct gl_video *p)
                        plane->gl_format, plane->gl_type, NULL);
 
         default_tex_params(gl, GL_TEXTURE_2D, GL_LINEAR);
+        gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST); gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     }
     gl->ActiveTexture(GL_TEXTURE0);
 
@@ -1852,6 +1879,7 @@ void gl_video_config(struct gl_video *p, struct mp_image *pt)
     }
     p->image_dw = pt->display_w;
     p->image_dh = pt->display_h;
+    p->chroma_loc = pt->chroma_location;
 }
 
 void gl_video_set_output_depth(struct gl_video *p, int r, int g, int b)
