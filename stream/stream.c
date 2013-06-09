@@ -747,7 +747,7 @@ int stream_enable_cache(stream_t **stream, int64_t size, int64_t min,
     cache->read_chunk = 4 * STREAM_BUFFER_SIZE;
 
     cache->url = strdup(orig->url);
-    cache->mime_type = talloc_strdup(cache, orig->url);
+    cache->mime_type = talloc_strdup(cache, orig->mime_type);
     cache->lavf_type = orig->lavf_type;
     cache->opts = orig->opts;
     cache->start_pos = orig->start_pos;
