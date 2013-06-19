@@ -1529,7 +1529,7 @@ static void saddf_osd_function_sym(char **buffer, int sym)
     saddf(buffer, "%s ", temp);
 }
 
-static void sadd_osd_status(char **buffer, struct MPContext *mpctx, bool full)
+static void sadd_osd_status(char **buffer, struct MPContext *mpctx, int osd_level)
 {
     bool fractions = mpctx->opts.osd_fractions;
     int sym = mpctx->osd_function;
@@ -1538,19 +1538,19 @@ static void sadd_osd_status(char **buffer, struct MPContext *mpctx, bool full)
             sym = OSD_CLOCK;
         } else if (mpctx->paused || mpctx->step_frames) {
             sym = OSD_PAUSE;
-        } else {
+        } else if (osd_level >= 2) {
             sym = OSD_PLAY;
         }
     }
     saddf_osd_function_sym(buffer, sym);
     char *custom_msg = mpctx->opts.osd_status_msg;
-    if (custom_msg && full) {
+    if (custom_msg && osd_level == 3) {
         char *text = mp_property_expand_string(mpctx, custom_msg);
         *buffer = talloc_strdup_append(*buffer, text);
         talloc_free(text);
-    } else {
+    } else if (osd_level >= 2) {
         sadd_hhmmssff(buffer, get_current_time(mpctx), fractions);
-        if (full) {
+        if (osd_level == 3) {
             saddf(buffer, " / ");
             sadd_hhmmssff(buffer, get_time_length(mpctx), fractions);
             sadd_percentage(buffer, get_percent_pos(mpctx));
@@ -1637,8 +1637,8 @@ static void update_osd_msg(struct MPContext *mpctx)
         // fallback on the timer
         char *text = NULL;
 
-        if (osd_level >= 2)
-            sadd_osd_status(&text, mpctx, osd_level == 3);
+        if (osd_level >= 1)
+            sadd_osd_status(&text, mpctx, osd_level);
 
         osd_set_text(osd, text);
         talloc_free(text);
